@@ -1,1 +1,148 @@
+\subsection{Attention Mechanism}\label{subsec_attention}
+After the embedding and positional encoding steps, the input is represented as a matrix in $\mathbb{R}^{n \times d}$. 
+This matrix is then passed to the Transformer encoder, where the \textit{attention mechanism} is first applied.\\
+
+Following \cite{Attention_survey}, the attention mechanism can be defined in its most general form as follows:
+\begin{definition}\label{def_attention}
+    Given a matrix $F \in \mathbb{R}^{n_f \times d_f}$, called \textbf{feature matrix}, and a vector $\mathbf{q} \in \mathbb{R}^{d_q}$, referred to as the \textbf{query vector}, the \textbf{Attention Mechanism} is a function
+    \begin{equation}\label{eq_attention_function}
+        \begin{aligned}
+            Att:\quad \mathbb{R}^{n_f \times d_f} \times &\mathbb{R}^{d_q} \to \mathbb{R}^{d_v}\\
+            (F,\quad&\mathbf{q}) \longmapsto \mathbf{c},
+        \end{aligned}
+    \end{equation}
+    where $\mathbf{c}$ is the \textbf{context vector}.
+\end{definition}
+
+Here, the feature matrix $F$ contains the information provided as input to the attention module, while the query vector $\mathbf{q}$ serves as a reference point against which the relevance of each element in $F$ is measured. Intuitively, $\mathbf{q}$ encodes the current context, guiding the attention mechanism to focus on the most informative components of $F$.\\
+We call \textit{Attention Module} (or \textit{Attention Block}) the computational block that performs this mechanism.
+In literature, several methods exist for obtaining the vector $\mathbf{q}$. In the following paragraph, we will present the most common approaches. The entire process that leads to the determination of this vector is generally referred to as the \textit{query model}.\\
+
+
+Given $F$ and $\mathbf{q}$, the first operation in the attention module is the construction of two matrices, K and V called respectively \textit{keys} and \textit{values} matrices.
+\begin{equation}
+  K = [\mathbf{k}_1,\dots,\mathbf{k}_{n_f}]  \in \mathbb{R}^{d_k \times n_f}, 
+  \qquad 
+  V = [\mathbf{v}_1,\dots,\mathbf{v}_{n_f}]  \in \mathbb{R}^{d_v \times n_f},
+\end{equation}
+where $d_k$ and $d_v$ denote the dimensions of keys and values respectively.
+In practice, $K$ and $V$ are obtained by linear projections of $F$ through weight matrices $W_k$ and $W_v$, which are randomly initialized and learned during training.\\
+
+The ultimate goal of the attention module is to compute the context vector $\mathbf{c}$ as a weighted sum of the value vectors $\mathbf{v}_i$.\\
+The weights associated with the values are derived from a similarity measure between the query $\mathbf{q}$ and the keys $\mathbf{k}_j$. For each $j$, the raw attention score is defined as
+\begin{equation}\label{weight_function}
+  e_j = score(\mathbf{q},\mathbf{k}_j).
+\end{equation}
+
+\begin{example}
+If the query and key vectors have the same dimension ($d_q = d_k$), the scoring function can be the dot product:
+\begin{equation}
+    e_j := \mathbf{q} \cdot \mathbf{k}_j.
+\end{equation}
+\end{example}
+
+The score $e_j$ quantifies the importance of the information contained in the $j$-th key with respect to the query $\mathbf{q}$.  
+Since these values are unbounded, they are normalized using an alignment function such as the \textit{softmax}.
+
+Finally, the context vector $\mathbf{c} \in \mathbb{R}^{d_v}$ is obtained as
+\begin{equation}
+    \mathbf{c} = \sum_{j=1}^{n_f} \text{softmax}(e_j) \cdot \mathbf{v}_j.
+\end{equation}
+This vector integrates information from the feature matrix $F$, reweighted according to their relevance to the query.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=\linewidth]{Images/Chap_2/Fig_2_Attn_survay.png}
+    \caption{Graphical illustration of the attention mechanism (from \cite{Attention_survey}).}
+    \label{attn_survay}
+\end{figure}
+
+\subsubsection{Query-Related Attention Mechanism}\label{Query-Related attention mechanism}
+In general, attention algorithms can be distinguished by their choice of score function, alignment function, type of input or features, and type of queries.  
+According to the taxonomy proposed in \cite{Attention_survey}, attention algorithms can be classified into three families: \textit{feature-related}, \textit{general}, and \textit{query-related}.\\  
+For our purposes, it is sufficient to focus on the last of these families.\\
+
+
+As previously mentioned, queries play a fundamental role in the attention mechanism, as they determine which information from the feature matrix is relevant.  
+When attention is computed purely on the basis of features, we speak of \textit{self-attention}. In this case, the queries can either be constant (e.g., in simple classification tasks) or learnable by the model. In the latter case, the model autonomously learns which “questions” to ask the keys. This approach is particularly useful when the relationships among feature vectors are not known a priori and we want the model to discover them.\\
+This is precisely the choice adopted in the Transformer encoder \cite{Att_is_all_u_need}, where queries are derived similarly to keys and values. Specifically, a trainable weight matrix $W_Q$ is defined such that
+\begin{equation}
+    Q = [ \mathbf{q}_1, \dots, \mathbf{q}_{n_{f}} ] = F \cdot W_Q.
+\end{equation}
+When a query $\mathbf{q}_j$ is used, the corresponding context vector synthesizes the information contained in the features that are most relevant for that query. These can include, for instance, semantic relationships between words.\\
+Another distinction among models lies in how queries are employed. In some neural architectures, multiple self-attention modules are stacked, with the output of one block merged with the features before being passed to the next block. In this way, the connections captured by self-attention are progressively refined.\\
+Finally, when the feature matrix and the queries originate from different sources, we speak of \textit{cross-attention}.  
+A typical example is found in the Transformer decoder, where the feature matrix comes from the encoder output, while the queries originate from the decoder input (see Sec.~\ref{Attention in Transformer}).
+
+\subsection{Attention in Transformers}\label{Attention in Transformer}
+Having introduced the general attention mechanism, we now describe its implementation in a standard Transformer, such as the one illustrated in Fig.~\ref{fig_Transformer}.\\
+In a Transformer, the attention mechanism is employed in three distinct ways:
+\begin{enumerate}
+    \item \textit{Multi-Head Self-Attention} with $h \in \mathbb{N}$ attention heads is applied in the encoder;
+    \item \textit{Masked Self-Attention} is used in the decoder; 
+    \item \textit{Cross-Attention} is also implemented in the decoder, in this case keys and values originate from the encoder, while queries come from the decoder.
+\end{enumerate}
+
+As discussed in Sec.~\ref{Positiona encoding}, the positional encoding matrix $PE$ is added to the embedded input $E$, producing the feature matrix:
+\begin{equation}
+    F = E + PE \in \mathbb{R}^{n \times d}.
+\end{equation}
+This matrix serves as the input to the encoder.\\ 
+Within the encoder, Multi-Head Self-Attention is computed. The feature matrix $F$ is multiplied by three trainable weight matrices $W_q, W_k, W_v \in \mathbb{R}^{d \times d_k}$, where $d_k$ denotes the dimension of the key vectors (in \cite{Att_is_all_u_need}, $d_k = d_v = d_q$), to obtain the matrices:
+\begin{equation}\label{eq_from_features_to_matrix}
+\begin{aligned}
+    Q &= F \cdot W_q, \\
+    K &= F \cdot W_k, \\
+    V &= F \cdot W_v,
+\end{aligned}
+\end{equation}
+all of which have dimensions $n \times d_k$.\\
+Next, the scaled dot-product attention is performed. For each query $\mathbf{q}_j$, the attention score is computed as:
+\begin{equation}\label{scaled_dot_product}
+    e_{j,l} = \mathbf{q}_j \cdot \mathbf{k}_l \quad \text{ for all } l=1,\dots,n
+\end{equation}
+Equation~\eqref{scaled_dot_product} corresponds to Eq.~\eqref{weight_function} with the dot product serving as the score function.  
+For numerical stability, the scores are divided by $\sqrt{d_k}$ before applying the $softmax$ normalization:
+\begin{equation}
+    \alpha_{j,l} = softmax\left(\frac{e_{j,l}}{\sqrt{d_k}}\right).
+\end{equation}
+This scaling mitigates the growth of the dot-product magnitude when $d_k$ is large.\\
+Finally, the context vector $\mathbf{c}_j \in \mathbb{R}^{d_v}$ is computed as a weighted sum of the value vectors:
+\begin{equation}
+    \mathbf{c}_j = \sum_{p=1}^{n_{f}} \alpha_{j,p} \cdot \mathbf{v}_p, \quad j = 1, \dots, n_{f}.
+\end{equation}
+This procedure can be expressed more compactly in matrix form; indeed, in the context of the Transformer, we specialize Def.~\ref{def_attention} as follows:
+
+\begin{definition}\label{def_attention_head}
+Given the feature matrix $F$ and three weight matrices $W_q, W_k, W_v$, define
+\begin{equation*}
+    Q = F \cdot W_q, \quad K = F \cdot W_k, \quad V = F \cdot W_v.
+\end{equation*}
+we call \textbf{Single Self-Attention Head} the attention function:
+\begin{equation}\label{eq_single_attention}
+    \text{Attention}(Q,K,V) = softmax\left(\frac{Q K^T}{\sqrt{d_k}}\right) V
+\end{equation}
+\end{definition}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=1.3\linewidth]{Images/Chap_2/scaled_dot_product_and_MHA.png}
+    \caption{Left: Scaled dot-product attention. Right: Multi-Head Attention.}
+    \label{scaled_dot_product_and_MHA}
+\end{figure}
+In each of the attention heads is performed Eq.~\eqref{eq_single_attention}, the encoder implements \textbf{Multi-Head Self-Attention}, meaning that each head has its own set of query, key, and value matrices. Each head computes attention in parallel, producing context vectors that are then concatenated and projected, as illustrated in Fig.~\ref{scaled_dot_product_and_MHA}.\\
+To formalize this mechanism in a rigorous mathematical form, we introduce the following definition.
+
+\begin{definition}
+In the same setting as Def.~\ref{def_attention_head}, let
+\begin{equation*}
+    \text{head}_i = \text{Attention}(Q^i, K^i, V^i), \quad i = 1, \dots, h,
+\end{equation*}
+where $Q^i = W_q^i \cdot F$, $K^i = W_k^i \cdot F$, $V^i = W_v^i \cdot F$, and $h$ is the number of heads.  
+The \textbf{Multi-Head Self-Attention (MHSA)} function is defined as:
+\begin{equation}
+    \text{MHSA}(F) = \text{Concat}(\text{head}_1, \dots, \text{head}_h) \cdot W^O,
+\end{equation}
+where $W^O \in \mathbb{R}^{h d_v \times d}$ is a trainable projection matrix.
+\end{definition}
 
